@@ -1,0 +1,125 @@
+create type Gender as enum ('Male','Female');
+create type FamilyStatus as enum ('Married','Single','Divorced','Widow');
+create type HouseType as enum ('House','Apartment');
+
+create table agencys
+(
+    id           serial primary key,
+    name         varchar,
+    phone_number varchar,
+    address_id   int references addresses (id)
+
+);
+create table addresses
+(
+    id     serial primary key,
+    city   varchar,
+    region varchar,
+    street varchar
+);
+create table owners
+(
+    id            serial primary key,
+    first_name    varchar,
+    last_name     varchar,
+    email         varchar,
+    date_of_birth date,
+    gender        Gender
+);
+create table customers
+(
+    id            serial primary key,
+    first_name    varchar,
+    last_name     varchar,
+    email         varchar,
+    date_of_birth date,
+    gender        Gender,
+    nationality   varchar,
+    family_status FamilyStatus
+);
+create table houses
+(
+    id          serial primary key,
+    house_type  HouseType,
+    price       numeric,
+    rating      float,
+    description text,
+    room        int,
+    furniture   boolean,
+    address_id  int references addresses (id),
+    owner_id    int references owners (id)
+);
+create table rent_info
+(
+    id          serial primary key,
+    owner_id    int references owners (id),
+    customer_id int references customers (id),
+    agency_id   int references agencys (id),
+    house_id    int references houses (id)
+);
+
+alter table agencys alter column name set not null;
+alter table agencys add constraint phone_numbers_k check ( phone_number ilike '+996%');
+alter table owners add constraint emaile unique (email);
+alter table customers add constraint  customers_unique unique  (email);
+alter type FamilyStatus rename to MaritalStatus;
+alter table customers rename  column family_status to marital_status;
+alter table rent_info add column check_in date;
+alter table rent_info add column check_out date;
+
+
+
+
+
+
+-- 1. Owner_лердин аттарынын арасынан эн коп символ камтыган owner_ди жана анын уйун(House) чыгар.
+select first_name,* from owners join rent_info ri on owners.id = ri.owner_id join
+    houses h on ri.house_id = h.id where length(first_name) = (select max(length(first_name))from owners);
+-- 2. Уйлордун баалары 1500, 2000 дин аралыгында бар болсо true чыгар, жок болсо false чыгар.
+select bool(price between '1500'and '2000') from houses;
+-- 3. id_лери 5, 6, 7, 8, 9, 10 го барабар болгон адресстерди жана ал адрессте кайсы уйлор бар экенин чыгар.
+
+-- 4. Бардык уйлорду, уйдун ээсинин атын, клиенттин атын, агенттин атын чыгар.
+select *,o.first_name,c.first_name,name from houses join owners o on houses.owner_id = o.id
+    join rent_info ri on houses.id = ri.house_id join customers c on c.id = ri.customer_id join agencys a on a.id = ri.agency_id;
+-- 5. Клиенттердин 10-катарынан баштап 1999-жылдан кийин туулган 15 клиентти чыгар.
+select * from customers where date_of_birth > '01-01-1999' offset 10 limit 25;
+-- 6. Рейтинги боюнча уйлорду сорттоп, уйлордун тайптарын, рейтингин жана уйдун ээлерин чыгар. (asc and desc)
+select house_type,first_name from houses join owners o on houses.owner_id = o.id order by house_type asc;
+select house_type,first_name from houses join owners o on houses.owner_id = o.id order by house_type desc ;
+-- 7. Уйлордун арасынан квартиралардын (apartment) санын жана алардын баасынын суммасын чыгар.
+select count(house_type),sum(price) from houses where house_type = 'Apartment';
+-- 8. Агентсволардын арасынан аты ‘My_House’ болгон агентсвоны, агентсвонын адресин жана анын бардык уйлорун, уйлордун адрессин чыгар.
+select name,city,region,street ,* from houses join agencys a on houses.address_id = a.address_id join addresses a2 on a.address_id = a2.id where name = 'My House';
+-- 9. Уйлордун арасынан мебели бар уйлорду, уйдун ээсин жана уйдун адрессин чыгар.
+select first_name,a2.*,* from houses join rent_info ri on houses.id = ri.house_id
+    join agencys a on a.id = ri.agency_id join owners o on o.id = houses.owner_id join addresses a2 on a2.id = a.address_id where furniture = true;
+-- 10.Кленти жок уйлордун баарын жана анын адрессин жана ал уйлор кайсыл агентсвога тийешелуу экенин чыгар.
+select ri.*,c.*,* from houses join rent_info ri on houses.id = ri.house_id join customers c on c.id = ri.customer_id;
+select a.*,a2.name,* from houses join rent_info ri on houses.id = ri.house_id join addresses a on a.id = houses.address_id
+    join agencys a2 on a2.id = ri.agency_id where ri IS NULL;
+-- 11.Клиенттердин улутуна карап, улутуну жана ал улуутта канча клиент жашайт санын чыгар.
+select nationality,count(customers) from customers group by nationality;
+-- 12.Уйлордун арасынан рейтингтери  чон, кичине, орточо болгон 3 уйду чыгар.
+select * from houses where rating = (select max(rating) from houses);
+select * from houses where rating = (select min(rating) from houses);
+select * from houses where rating = (select avg(rating) from houses);
+-- 13.Уйлору жок киленттерди, клиенттери жок уйлорду чыгар.
+
+-- 14.Уйлордун бааларынын орточо суммасын чыгар.
+select avg(price) from houses;
+-- 15.‘A’ тамга менен  башталган уйдун ээсинин аттарын, клиенттердин аттарын чыгар.
+select c.first_name,owners.first_name from owners
+    join rent_info ri on owners.id = ri.owner_id join customers c on c.id = ri.customer_id
+                                      where owners.first_name ilike 'A%' ;
+-- 16.Эн уйу коп owner_ди жана анын уйлорунун санын чыгар.
+select first_name,count(h) as g from owners join houses h on owners.id = h.owner_id group by first_name
+-- 17.Улуту Kyrgyzstan уй-булолу customerлерди чыгарыныз.
+-- 18.Эн коп болмолуу уйду жана анын адресин ал уй кайсыл ownerге таандык ошону чыгарыныз.
+-- 19.Бишкекте   жайгашкан уйлорду  жана  клиентерин  кошо чыгарыныз.
+-- 20.Жендерине карап группировка кылыныз.
+-- 21.Эн коп моонотко  ижарага алынган уйду чыгарыныз.
+-- 22.Эн кымбат уйду жана анын ээсин чыгарыныз.
+-- 23.Бир региондо жайгашкан баардык агентстволорду чыгарыныз
+-- 24.Рейтинг боюнча эн популярдуу 5 уйду чыгар.
+-- 25.Орто жаштагы owner_ди , анын уйун , уйдун адрессин чыгар.
